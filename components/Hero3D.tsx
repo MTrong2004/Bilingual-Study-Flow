@@ -4,7 +4,22 @@ import { Float, Stars, Icosahedron, useTexture } from '@react-three/drei';
 import * as THREE from 'three';
 
 // Define types for Three.js elements
+// This is required because @react-three/fiber elements are not part of the standard JSX.IntrinsicElements
 declare global {
+  namespace JSX {
+    interface IntrinsicElements {
+      ambientLight: any;
+      pointLight: any;
+      directionalLight: any;
+      group: any;
+      meshStandardMaterial: any;
+      fog: any;
+    }
+  }
+}
+
+// Also augment React's JSX namespace for projects using newer TypeScript/React versions
+declare module 'react' {
   namespace JSX {
     interface IntrinsicElements {
       ambientLight: any;

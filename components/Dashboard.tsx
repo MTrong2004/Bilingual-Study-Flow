@@ -3,7 +3,7 @@ import { ProcessedData } from '../types';
 import VideoPlayer, { VideoPlayerRef } from './VideoPlayer';
 import NotesPanel from './NotesPanel';
 import FlashcardsPanel from './FlashcardsPanel';
-import { ArrowLeft, Volume2, Loader2, Download, FileText } from 'lucide-react';
+import { ArrowLeft, Volume2, Loader2, Download, FileText, FileVideo } from 'lucide-react';
 
 interface DashboardProps {
   file: File;
@@ -40,6 +40,16 @@ const Dashboard: React.FC<DashboardProps> = ({ file, data, onBack }) => {
         // or we could track speaking state in VideoPlayer but simple is better here.
         setLoadingAudioId(null);
     }
+  };
+
+  const handleDownloadSource = () => {
+    const a = document.createElement('a');
+    a.href = videoUrl;
+    a.download = file.name;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setShowExportMenu(false);
   };
 
   const exportSRT = (type: 'bilingual' | 'original' | 'vietnamese') => {
@@ -93,20 +103,23 @@ const Dashboard: React.FC<DashboardProps> = ({ file, data, onBack }) => {
         </div>
         
         <div className="flex items-center gap-3">
-            {/* Export Subtitles Dropdown */}
+            {/* Export Dropdown */}
             <div className="relative">
                 <button 
                     onClick={() => setShowExportMenu(!showExportMenu)}
                     className="flex items-center gap-2 px-3 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
                 >
                     <Download className="w-4 h-4" />
-                    <span className="hidden sm:inline">Export Subs</span>
+                    <span className="hidden sm:inline">Export</span>
                 </button>
                 
                 {showExportMenu && (
                     <>
                         <div className="fixed inset-0 z-10" onClick={() => setShowExportMenu(false)}></div>
-                        <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-xl border border-gray-100 z-20 overflow-hidden">
+                        <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-xl border border-gray-100 z-20 overflow-hidden">
+                            <div className="px-4 py-2 text-xs font-semibold text-gray-400 uppercase tracking-wider bg-gray-50/50">
+                                Subtitles
+                            </div>
                             <button onClick={() => exportSRT('bilingual')} className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-600">
                                 Bilingual (.srt)
                             </button>
@@ -115,6 +128,16 @@ const Dashboard: React.FC<DashboardProps> = ({ file, data, onBack }) => {
                             </button>
                             <button onClick={() => exportSRT('original')} className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-600">
                                 Original Only (.srt)
+                            </button>
+
+                            <div className="border-t border-gray-100 my-1"></div>
+                            
+                            <div className="px-4 py-2 text-xs font-semibold text-gray-400 uppercase tracking-wider bg-gray-50/50">
+                                Media
+                            </div>
+                            <button onClick={handleDownloadSource} className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-600 flex items-center gap-2">
+                                <FileVideo className="w-4 h-4" />
+                                Download Source Video
                             </button>
                         </div>
                     </>
