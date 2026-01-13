@@ -1,5 +1,5 @@
 import React, { useState, ChangeEvent, useEffect } from 'react';
-import { Upload, FileVideo, FileAudio, CheckCircle2, AlertCircle, Sparkles, XCircle, Mic2, BookOpen, Layers, ArrowRight, History, Zap } from 'lucide-react';
+import { Upload, FileVideo, FileAudio, CheckCircle2, AlertCircle, Sparkles, XCircle, Mic2, BookOpen, Layers, ArrowRight, History, Zap, Key } from 'lucide-react';
 import { ProcessingOptions, ProcessedData } from '../types';
 import { getFromCache } from '../services/cacheService';
 
@@ -16,11 +16,29 @@ const FileUpload: React.FC<FileUploadProps> = ({ onStart, onCancel, isLoading, s
   const [error, setError] = useState<string | null>(null);
   const [cachedData, setCachedData] = useState<ProcessedData | null>(null);
   const [checkingCache, setCheckingCache] = useState(false);
+  
+  // API Key State
+  const [apiKey, setApiKey] = useState<string>('');
+  const [showKeyModal, setShowKeyModal] = useState(false);
+
   const [options, setOptions] = useState<ProcessingOptions>({
     generateNotes: true,
     generateFlashcards: true,
     originalLanguage: 'Auto Detect'
   });
+
+  // Load API key from local storage on mount
+  useEffect(() => {
+    const storedKey = localStorage.getItem('gemini_api_key');
+    if (storedKey) setApiKey(storedKey);
+    else if (process.env.API_KEY) setApiKey(process.env.API_KEY);
+  }, []);
+
+  const saveApiKey = (key: string) => {
+    setApiKey(key);
+    localStorage.setItem('gemini_api_key', key);
+    setShowKeyModal(false);
+  };
 
   // Check cache whenever file changes
   useEffect(() => {
@@ -64,8 +82,12 @@ const FileUpload: React.FC<FileUploadProps> = ({ onStart, onCancel, isLoading, s
   const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); };
 
   const handleSubmit = () => {
+    if (!apiKey && !cachedData) {
+        setShowKeyModal(true);
+        return;
+    }
+
     if (file) {
-        // Pass cachedData (if it exists) to the start function
         onStart(file, options, cachedData || undefined);
     }
   };
@@ -77,6 +99,57 @@ const FileUpload: React.FC<FileUploadProps> = ({ onStart, onCancel, isLoading, s
         {/* Glow Effects */}
         <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/10 rounded-full blur-[100px] pointer-events-none"></div>
         <div className="absolute bottom-0 left-0 w-64 h-64 bg-purple-500/10 rounded-full blur-[100px] pointer-events-none"></div>
+
+        {/* API Key Config Button */}
+        <button 
+            onClick={() => setShowKeyModal(true)}
+            className="absolute top-6 right-6 p-2 rounded-full hover:bg-white/10 text-gray-400 hover:text-white transition-colors z-20 flex items-center gap-2"
+            title="Configure API Key"
+        >
+            <span className={`w-2 h-2 rounded-full ${apiKey ? 'bg-green-500' : 'bg-red-500 animate-pulse'}`}></span>
+            <Key className="w-5 h-5" />
+        </button>
+
+        {/* API KEY MODAL */}
+        {showKeyModal && (
+            <div className="absolute inset-0 z-50 bg-black/90 backdrop-blur-md flex flex-col items-center justify-center p-8 animate-fade-in">
+                <div className="w-full max-w-md space-y-4">
+                    <div className="text-center">
+                        <div className="w-12 h-12 bg-white/10 rounded-full flex items-center justify-center mx-auto mb-4 text-white">
+                            <Key className="w-6 h-6" />
+                        </div>
+                        <h3 className="text-2xl font-bold text-white">Setup Gemini API</h3>
+                        <p className="text-gray-400 text-sm mt-2">To use this app for free, get your own API key from Google AI Studio.</p>
+                    </div>
+                    
+                    <input 
+                        type="text" 
+                        placeholder="Paste AIza... key here"
+                        className="w-full bg-white/5 border border-white/20 rounded-xl p-4 text-white placeholder-gray-600 focus:outline-none focus:border-indigo-500 transition-colors"
+                        defaultValue={apiKey}
+                        onChange={(e) => setApiKey(e.target.value)}
+                    />
+                    
+                    <div className="flex gap-3">
+                        <a 
+                            href="https://aistudio.google.com/app/apikey" 
+                            target="_blank" 
+                            rel="noreferrer"
+                            className="flex-1 py-3 bg-white/5 hover:bg-white/10 text-white rounded-xl font-medium text-center text-sm transition-colors border border-white/10"
+                        >
+                            Get Key Free ↗
+                        </a>
+                        <button 
+                            onClick={() => saveApiKey(apiKey)}
+                            className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold transition-colors shadow-lg shadow-indigo-500/30"
+                        >
+                            Save & Continue
+                        </button>
+                    </div>
+                    <button onClick={() => setShowKeyModal(false)} className="w-full text-center text-gray-500 hover:text-white text-sm mt-4">Cancel</button>
+                </div>
+            </div>
+        )}
 
         <div className="relative z-10">
             <h2 className="text-3xl font-bold text-white mb-2">Initialize Session</h2>

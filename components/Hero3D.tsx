@@ -12,6 +12,7 @@ declare global {
       directionalLight: any;
       group: any;
       meshStandardMaterial: any;
+      fog: any;
     }
   }
 }

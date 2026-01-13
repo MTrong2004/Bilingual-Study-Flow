@@ -1,5 +1,17 @@
-import { GoogleGenAI, Schema, Type, Part, Modality } from "@google/genai";
+import { GoogleGenAI, Schema, Type, Part, Modality, GenerateContentResponse } from "@google/genai";
 import { ProcessedData, Subtitle, Note, Flashcard, ProcessingOptions, StatusUpdateCallback } from "../types";
+
+// --- HELPER: Get API Key ---
+export const getApiKey = (): string | null => {
+  // 1. Check Local Storage (User provided key)
+  const localKey = localStorage.getItem("gemini_api_key");
+  if (localKey && localKey.trim().length > 0) return localKey;
+
+  // 2. Check Environment Variable (Dev provided key)
+  if (process.env.API_KEY && process.env.API_KEY.length > 0) return process.env.API_KEY;
+
+  return null;
+};
 
 // --- HELPER: Promise Wrapper for Cancellation ---
 const runWithCancellation = <T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> => {
@@ -59,7 +71,8 @@ const waitForFileActive = async (
   for (let i = 0; i < maxAttempts; i++) {
     if (signal?.aborted) throw new Error("Processing cancelled by user.");
 
-    const fileStatus = await runWithCancellation(ai.files.get({ name: fileName }), signal);
+    // Cast to any because the generic wrapper returns unknown in some contexts or SDK types are complex
+    const fileStatus = await runWithCancellation(ai.files.get({ name: fileName }), signal) as any;
     const state = fileStatus.state;
     console.log(`File state: ${state}`);
 
@@ -114,8 +127,8 @@ const decodeAudioData = async (
 };
 
 export const getTTSAudio = async (text: string, voiceName: string, audioContext: AudioContext): Promise<AudioBuffer> => {
-  const apiKey = process.env.API_KEY;
-  if (!apiKey) throw new Error("API Key missing");
+  const apiKey = getApiKey();
+  if (!apiKey) throw new Error("API Key missing. Please set it in the main menu.");
   
   const ai = new GoogleGenAI({ apiKey });
   
@@ -146,8 +159,8 @@ export const processMediaWithGemini = async (
   try {
     if (signal?.aborted) throw new Error("Processing cancelled by user.");
 
-    const apiKey = process.env.API_KEY;
-    if (!apiKey) throw new Error("API Key is missing.");
+    const apiKey = getApiKey();
+    if (!apiKey) throw new Error("API Key is missing. Please click the Key icon to add your Gemini API Key.");
 
     const ai = new GoogleGenAI({ apiKey });
     const mimeType = file.type;
@@ -165,7 +178,8 @@ export const processMediaWithGemini = async (
         file: file,
         config: { displayName: file.name, mimeType: mimeType }
       });
-      const uploadResult = await runWithCancellation(uploadPromise, signal);
+      // Cast to any to avoid 'unknown' type errors from the wrapper
+      const uploadResult = await runWithCancellation(uploadPromise, signal) as any;
       const fileUri = uploadResult.uri;
       const fileName = uploadResult.name;
       if (!fileUri || !fileName) throw new Error("Upload failed.");
@@ -255,38 +269,53 @@ export const processMediaWithGemini = async (
     `;
 
     const generatePromise = ai.models.generateContent({
-      model: "gemini-3-flash-preview", // Switched to Flash for better speed/reliability on transcripts
+      model: "gemini-3-flash-preview", 
       contents: { parts: [mediaPart, { text: promptText }] },
       config: { 
           responseMimeType: "application/json", 
           responseSchema: compressedSchema,
           // MAXIMIZE OUTPUT: Force model to use full capacity for long transcripts
           maxOutputTokens: 8192, 
-          // REMOVED thinkingConfig: Flash model handles standard tasks better without it and avoids "Budget 0 invalid" errors.
+          // REMOVED thinkingConfig to avoid errors
       }
     });
     
-    const response = await runWithCancellation(generatePromise, signal);
+    // Cast to GenerateContentResponse or any to fix access errors
+    const response = await runWithCancellation(generatePromise, signal) as GenerateContentResponse;
 
     if (!response.text) throw new Error("No response from AI");
     
+    // Auto-repair JSON if truncated
+    let jsonText = response.text.trim();
+    if (!jsonText.endsWith('}')) {
+       // Attempt to find the last valid object in the array structure and close it
+       const lastValidSubs = jsonText.lastIndexOf(']}');
+       if (lastValidSubs !== -1) {
+           jsonText = jsonText.substring(0, lastValidSubs + 2) + ',"nts":[],"cards":[]}'; 
+           console.warn("JSON was truncated. Auto-repaired by closing subtitles and skipping extras.");
+       } else {
+           // Basic closure attempt
+           jsonText += ']}';
+       }
+    }
+
     // Parse compressed JSON and map back to full interface
-    const rawData = JSON.parse(response.text);
+    const rawData = JSON.parse(jsonText);
     
     const processedData: ProcessedData = {
-        subtitles: rawData.subs.map((s: any) => ({
+        subtitles: (rawData.subs || []).map((s: any) => ({
             id: s.i,
             startTime: s.s,
             endTime: s.e,
             textOriginal: s.en,
             textVietnamese: s.vi
         })),
-        notes: rawData.nts.map((n: any) => ({
+        notes: (rawData.nts || []).map((n: any) => ({
             timestamp: n.ts,
             title: n.ti,
             content: n.co
         })),
-        flashcards: rawData.cards.map((c: any) => ({
+        flashcards: (rawData.cards || []).map((c: any) => ({
             id: c.id || Math.random().toString(),
             term: c.t,
             definition: c.d,
@@ -305,7 +334,7 @@ export const processMediaWithGemini = async (
     if (msg.includes('503')) throw new Error("Server overloaded. Try again shortly.");
     if (msg.includes('SAFETY')) throw new Error("Content blocked by safety filters.");
     if (msg.includes('400') && msg.includes('context')) throw new Error("File too long (Context Exceeded).");
-    if (msg.includes('403')) throw new Error("Invalid API Key.");
+    if (msg.includes('403') || msg.includes('API Key')) throw new Error("Invalid API Key. Please check your settings.");
     
     throw error;
   }
