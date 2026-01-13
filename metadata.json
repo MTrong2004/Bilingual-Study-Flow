@@ -1,0 +1,5 @@
+{
+  "name": "Bilingual Study Flow",
+  "description": "An AI-powered video study tool that generates bilingual subtitles, timestamped notes, and flashcards from your uploaded media.",
+  "requestFramePermissions": []
+}
